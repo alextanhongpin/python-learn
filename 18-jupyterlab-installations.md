@@ -12,3 +12,19 @@ Solution:
 ```
 pip install ipywidgets
 ```
+
+## Dependencies Issue
+
+```
+  • Check your dependencies Python requirement: The Python requirement can be specified via the `python` or `markers` properties
+
+    For fastembed, a possible solution would be to set the `python` property to ">=3.11,<3.12"
+```
+Solution:
+
+Update the `pyproject.toml` file:
+
+```
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+```
