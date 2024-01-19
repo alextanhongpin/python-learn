@@ -10,5 +10,7 @@ The enable auto format on save:
 
 
 ```
+poetry add jupyterlab-code-formatter
+poetry add black isort
 jupyter nbextension enable --py widgetsnbextension
 ```
