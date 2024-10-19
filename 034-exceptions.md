@@ -72,3 +72,19 @@ main()
 # Treated as ValueError: value is invalid (1 sub-exception)
 # Treated as TypeError: value is invalid (1 sub-exception)
 ```
+
+## Custom Exception
+
+
+```python
+class Error(Exception):
+  # Todo, add type, code and detail
+  pass
+
+class NotFoundError(Error):
+  pass
+
+from functools import partial
+
+UserNotFoundError = partial(NotFoundError, "The user does not exist or may have been deleted")
+```
