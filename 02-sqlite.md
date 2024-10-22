@@ -1,7 +1,9 @@
 # Sqlite3
 
+https://remusao.github.io/posts/few-tips-sqlite-perf.html
 
 ## Commit
+
 
 
 If you do any mutations, make sure to run commit on `Connection`, not `Cursor`.
