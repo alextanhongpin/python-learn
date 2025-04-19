@@ -1,10 +1,10 @@
 # Connect to psycopg
 
+`db.py`:
+
 ```python
-import psycopg
 from psycopg.rows import namedtuple_row
 from psycopg_pool import AsyncConnectionPool
-import os
 from collections import namedtuple
 from contextlib import asynccontextmanager
 
@@ -12,14 +12,16 @@ Session = namedtuple("Session", ["connection", "cursor"])
 
 
 @asynccontextmanager
-async def connect(url=os.environ["DATABASE_URL"]):
+async def connect(url):
     """Create a connection pool."""
+    if not url:
+        raise ValueError("DATABASE_URL is not set")
 
     # Create a connection pool once.
-    async with AsyncConnectionPool(os.getenv("DATABASE_URL")) as pool:
+    async with AsyncConnectionPool(url) as pool:
 
         @asynccontextmanager
-        async def session():
+        async def SessionFactory():
             """Returns the connection and cursor."""
             async with pool.connection() as conn:
                 # The connection is in autocommit mode by default
@@ -27,7 +29,15 @@ async def connect(url=os.environ["DATABASE_URL"]):
                 async with conn.cursor(row_factory=namedtuple_row) as cur:
                     yield Session(connection=conn, cursor=cur)
 
-        yield session
+        yield SessionFactory
+```
+
+`main.py`:
+
+```python
+import psycopg
+import os
+from db import Session, connect
 
 
 async def add(session: Session, a: int, b: int) -> int:
@@ -38,8 +48,9 @@ async def add(session: Session, a: int, b: int) -> int:
 
 
 async def main():
-    async with connect() as session:
-        async with session() as (conn, cur):
+    connstring = os.environ["DATABASE_URL"]
+    async with connect(connstring) as Session:
+        async with Session() as (conn, cur):
             result = await cur.execute("SELECT 1 + 1 as sum")
             total = await result.fetchone()
             print(total.sum)
@@ -63,9 +74,8 @@ async def main():
             # COMMIT is executed at the end of the block.
             # The connection is in idle state again.
 
-        print("adding with session")
-        async with session() as sess:
-            print(await add(sess, 1, 2))
+        async with Session() as session:
+            print(await add(session, 1, 2))
 
 
 if __name__ == "__main__":
