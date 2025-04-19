@@ -3,12 +3,15 @@
 `db.py`:
 
 ```python
+import psycopg
 from psycopg.rows import namedtuple_row
 from psycopg_pool import AsyncConnectionPool
 from collections import namedtuple
 from contextlib import asynccontextmanager
+from typing import Callable
 
-Session = namedtuple("Session", ["connection", "cursor"])
+type Connection = psycopg.AsyncConnection
+Session = Callable[[], Connection]
 
 
 @asynccontextmanager
@@ -21,15 +24,15 @@ async def connect(url):
     async with AsyncConnectionPool(url) as pool:
 
         @asynccontextmanager
-        async def SessionFactory():
+        async def create_session() -> Connection:
             """Returns the connection and cursor."""
             async with pool.connection() as conn:
-                # The connection is in autocommit mode by default
-                # You can use a row factory to get dict rows
-                async with conn.cursor(row_factory=namedtuple_row) as cur:
-                    yield Session(connection=conn, cursor=cur)
+                # Set the row factory to namedtuple_row
+                conn.row_factory = namedtuple_row
 
-        yield SessionFactory
+                yield conn
+
+        yield create_session
 ```
 
 `main.py`:
@@ -37,12 +40,12 @@ async def connect(url):
 ```python
 import psycopg
 import os
-from db import Session, connect
+from db import Session, Connection, connect
 
 
-async def add(session: Session, a: int, b: int) -> int:
+async def add(conn: Connection, a: int, b: int) -> int:
     """Add two numbers."""
-    result = await session.cursor.execute("SELECT %(a)s + %(b)s as sum", dict(a=a, b=b))
+    result = await conn.execute("SELECT %(a)s + %(b)s as sum", dict(a=a, b=b))
     total = await result.fetchone()
     return total.sum
 
@@ -50,8 +53,8 @@ async def add(session: Session, a: int, b: int) -> int:
 async def main():
     connstring = os.environ["DATABASE_URL"]
     async with connect(connstring) as Session:
-        async with Session() as (conn, cur):
-            result = await cur.execute("SELECT 1 + 1 as sum")
+        async with Session() as conn:
+            result = await conn.execute("SELECT 1 + 1 as sum")
             total = await result.fetchone()
             print(total.sum)
             # The connection is autocommit, so no BEGIN executed.
@@ -59,23 +62,25 @@ async def main():
             try:
                 async with conn.transaction():
                     # BEGIN is executed, a transaction started
-                    await cur.execute(
-                        "INSERT INTO users(name) VALUES (%s)", ("Thunder",)
+                    await conn.execute(
+                        "INSERT INTO users(name) VALUES (%s)", ("Alice",)
                     )
-                    await cur.execute("INSERT INTO users(name) VALUES (%s)", ("Bob",))
+                    await conn.execute(
+                        "INSERT INTO users(name) VALUES (%s)", ("Charles",)
+                    )
             except psycopg.errors.UniqueViolation:
                 # This is a unique violation error
                 # ROLLBACK is executed, the transaction is aborted
                 pass
             # These two operation run atomically in the same transaction
-            result = await cur.execute("SELECT * FROM users")
+            result = await conn.execute("SELECT * FROM users")
             users = await result.fetchall()
             print(users)
             # COMMIT is executed at the end of the block.
             # The connection is in idle state again.
 
-        async with Session() as session:
-            print(await add(session, 1, 2))
+        async with Session() as conn:
+            print(await add(conn, 1, 2))
 
 
 if __name__ == "__main__":
